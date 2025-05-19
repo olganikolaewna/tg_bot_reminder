@@ -35,17 +35,63 @@ async def user_exists(user_id):
         return user is not None
 
 
-async def save_reminder(user_id: int, title: str, reminder_time: time, description: str, frequency:str):
+async def save_reminder(user_id: int, title: str, reminder_time: time, 
+                      description: str = '', frequency: str = 'daily', 
+                      type: str = 'regular'):
     async with async_session() as session:
         reminder = Reminder(
             user_id=user_id,
             title=title,
-            type='regular',
+            type=type,
             frequency=frequency,
             reminder_time=reminder_time,
-            days_of_week='',
+            days_of_week = '',
             description=description,
             is_active=True
         )
         session.add(reminder)
         await session.commit()
+        await session.refresh(reminder)
+        return reminder
+
+async def save_habit(reminder_id: int, target_days: int):
+    async with async_session() as session:
+        habit = Habit(
+            reminder_id=reminder_id,
+            target_days=target_days,
+            streak=0  # Начинаем с 0 дней подряд
+        )
+        session.add(habit)
+        await session.commit()
+
+async def get_reminders(user_id: int):
+    async with async_session() as session:
+        result = await session.execute(
+            select(Reminder)
+            .where(Reminder.user_id == user_id, Reminder.is_active == True, Reminder.type == 'regular')
+            .order_by(Reminder.reminder_time)
+        )
+        return result.scalars().all()
+    
+async def delete_reminder(reminder_id: int):
+    async with async_session() as session:
+        reminder = await session.get(Reminder, reminder_id)
+        if reminder:
+            await session.delete(reminder)
+            await session.commit()
+
+
+async def get_habits_with_titles(user_id: int):
+    async with async_session() as session:
+        result = await session.execute(
+            select(Reminder, Habit)
+            .join(Habit, Reminder.reminder_id == Habit.reminder_id)
+            .where(
+                Reminder.user_id == user_id,
+                Reminder.is_active == True,
+                Reminder.type == 'habit'
+            )
+            .order_by(Reminder.reminder_time)
+        )
+        return result.all()
+

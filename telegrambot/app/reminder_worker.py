@@ -28,39 +28,34 @@ async def reminder_worker(bot: Bot):
                         continue
 
                     user_now = pytz.utc.localize(now_utc).astimezone(user_tz)
-
-                    # Проверка времени
                     user_time = user_now.time().replace(second=0, microsecond=0)
                     reminder_time = reminder.reminder_time.replace(second=0, microsecond=0)
 
-                    is_time_match = user_time == reminder_time
- 
-
-                    if not is_time_match:
+                    if user_time != reminder_time:
                         continue
 
-                    # Проверка частоты
-                    send = False
-
-                    if reminder.frequency == 'once':
-                        send = True
-                        reminder.is_active = False
-                    elif reminder.frequency == 'daily':
-                        send = True
-                    elif reminder.frequency == 'weekly':
-                        today = user_now.strftime('%a').lower()
-                        days = [d.strip().lower() for d in reminder.days_of_week.split(',')]
-                        send = today in days
-
-                    if send:
+                    # Раздельная обработка по типам
+                    if reminder.type == 'habit':
+                        # Отправка с клавиатурой для привычек
+                        from app.keyboards import habit_confirmation_kb
                         await bot.send_message(
-                            reminder.user_id,
-                            f"⏰ {reminder.title}\n\n{reminder.description}"
+                            chat_id=reminder.user_id,
+                            text=f"🔔 Привычка: {reminder.title}\n{reminder.description}",
+                            reply_markup=habit_confirmation_kb(reminder.reminder_id)
                         )
+                    else:
+                        # Обычное напоминание
+                        await bot.send_message(
+                            chat_id=reminder.user_id,
+                            text=f"⏰ Напоминание: {reminder.title}\n{reminder.description}"
+                        )
+
+                    # Обработка частоты (для одноразовых напоминаний)
+                    if reminder.frequency == 'once':
+                        reminder.is_active = False
 
                 except Exception as e:
                     print(f"[ERROR] Ошибка отправки напоминания: {e}")
 
             await session.commit()
-
         await asyncio.sleep(60)
